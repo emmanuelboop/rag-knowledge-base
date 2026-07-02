@@ -76,7 +76,7 @@ function ChatLayout({ selectedDocument }: ChatLayoutProps) {
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-6">
-                {conversation.map((message, index) => (
+                {conversation.map((message, _) => (
                     <MessageBubble
                         key={message.id}
                         message={message}
