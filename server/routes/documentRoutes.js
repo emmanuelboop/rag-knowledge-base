@@ -8,6 +8,7 @@ const { extractText } = require("../services/documentService")
 const { generateResponse } = require("../services/openaiService")
 const { chunkText } = require("../services/chunkService")
 const { generateEmbedding } = require("../services/embeddingService")
+const fs = require("fs/promises");
 
 
 const upload = multer({
@@ -36,36 +37,53 @@ function authenticate(req, res, next) {
 }
 
 router.post("/upload", authenticate, upload.single("file"), async (req, res) => {
-    console.log("file from frontend: ", req.file);
-    console.log(req.user)
-    const user_id = req.user.userID
-    const file_name = req.file.originalname
-    const file_path = req.file.path
-    const response = await pool.query("INSERT INTO documents(user_id, file_name, file_path) VALUES($1,$2,$3) RETURNING *",
-        [user_id, file_name, file_path])
-    console.log("response: ", response.rows[0])
+    try {
+        console.log("file from frontend: ", req.file);
+        console.log(req.user)
+        const user_id = req.user.userID
+        const file_name = req.file.originalname
+        const file_path = req.file.path
+        const response = await pool.query("INSERT INTO documents(user_id, file_name, file_path) VALUES($1,$2,$3) RETURNING *",
+            [user_id, file_name, file_path])
+        console.log("response: ", response.rows[0])
 
-    const extractedText = await extractText(file_path)
-    console.log("extracted text: ", extractedText)
+        const extractedText = await extractText(file_path)
+        console.log("extracted text: ", extractedText)
 
-    const chunkedText = chunkText(extractedText)
-    console.log("chunked text: ", chunkedText.length)
+        const chunkedText = chunkText(extractedText)
+        console.log("chunked text: ", chunkedText.length)
 
-    for (const chunk of chunkedText) {
-        const textEmbedding = await generateEmbedding(chunk)
-        await pool.query(
-            "INSERT INTO document_chunks(document_id, chunk_text, embedding) VALUES($1,$2,$3)",
-            [response.rows[0].id, chunk, JSON.stringify(textEmbedding)]
-        )
+        for (const chunk of chunkedText) {
+            const textEmbedding = await generateEmbedding(chunk)
+            await pool.query(
+                "INSERT INTO document_chunks(document_id, chunk_text, embedding) VALUES($1,$2,$3)",
+                [response.rows[0].id, chunk, JSON.stringify(textEmbedding)]
+            )
+        }
+
+        console.log("embedding added")
+
+        res.json({
+            success: true,
+            data: response.rows[0]
+        });
+
+    } catch (error) {
+
+        console.log("error in upload: ", error)
+        res.json({
+            success: false,
+        });
+
+    } finally {
+        if (req.file) {
+            try {
+                await fs.unlink(req.file.path);
+            } catch (err) {
+                console.error("Failed to delete temporary upload:", err);
+            }
+        }
     }
-
-    console.log("embedding added")
-
-
-    res.json({
-        success: true,
-        data: response.rows[0]
-    });
 }
 );
 
@@ -87,7 +105,7 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:id/rename", authenticate, async (req, res) => {
     try {
-        console.log("new document name: ",req.body.documentName)
+        console.log("new document name: ", req.body.documentName)
         const result = await pool.query(`
                 UPDATE documents
                 SET file_name = $1
@@ -95,37 +113,37 @@ router.put("/:id/rename", authenticate, async (req, res) => {
                 AND user_id = $3
                 RETURNING *
             `, [req.body.documentName, req.params.id, req.user.userID])
-        
-        console.log("document details: ",result.rows)
+
+        console.log("document details: ", result.rows)
 
         res.json({
             success: true,
 
         })
     } catch (error) {
-        console.log("error: ",error)
+        console.log("error: ", error)
         res.json({
             success: false,
-            data: "server error "+error
+            data: "server error " + error
         })
     }
 })
 
 router.delete("/:id", authenticate, async (req, res) => {
-    try{
+    try {
         await pool.query(`
                 DELETE FROM documents
                 WHERE id = $1
                 AND user_id = $2
             `,
-        [req.params.id, req.user.userID])
-        
+            [req.params.id, req.user.userID])
+
         res.json({
             success: true,
 
         })
-    }catch(error){
-        console.log("error: ",error)
+    } catch (error) {
+        console.log("error: ", error)
         res.json({
             success: false
         })
