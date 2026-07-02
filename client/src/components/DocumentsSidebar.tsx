@@ -89,7 +89,7 @@ function DocumentsSidebar({ documents, setDocuments, setSelectedDocument }: DSid
             </Button>
 
             <div className="flex flex-col gap-2 overflow-y-auto mb-4">
-                {documents.map((item, index) => (
+                {documents.map((item) => (
                     <div className="flex items-center gap-1"
                         key={item.id}
                     >
